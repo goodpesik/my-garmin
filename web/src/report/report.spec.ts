@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildFilters } from "./activityTypes";
-import { buildReport, correlations, pearson, selectActivities, weekStart, type Activity } from "./aggregate";
+import { buildReport, byRunCategory, correlations, pearson, selectActivities, weekStart, type Activity } from "./aggregate";
 import { formatSpeed, rowLabel } from "./format";
 import { presetRange } from "./period";
 import { distanceSeries } from "./chart";
@@ -182,5 +182,19 @@ describe("VO2max", () => {
     const [jan, feb] = buildReport(acts, "month", "2026-01-01", "2026-02-28");
     expect(jan.avgVo2max).toBe(52);
     expect(feb.avgVo2max).toBeNull();
+  });
+});
+
+describe("byRunCategory", () => {
+  const acts = [
+    { ...run(1, "2026-01-05 07:00:00", 10, 50, 150), is_interval: 1 },
+    { ...run(2, "2026-01-06 07:00:00", 10, 50, 150), is_interval: 0 },
+    run(3, "2026-01-07 07:00:00", 10, 50, 150),
+  ];
+
+  it("splits runs into intervals and steady (cross) runs; all keeps everything", () => {
+    expect(byRunCategory(acts, "intervals").map((a) => a.activity_id)).toEqual([1]);
+    expect(byRunCategory(acts, "cross").map((a) => a.activity_id)).toEqual([2, 3]);
+    expect(byRunCategory(acts, "all")).toHaveLength(3);
   });
 });

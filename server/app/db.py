@@ -145,7 +145,16 @@ class Database:
             rows = self._conn.execute(
                 f"""SELECT {", ".join(ACTIVITY_COLUMNS)},
                            -- Garmin's VO2max estimate recorded with the activity, when it made one.
-                           json_extract(raw, '$.vO2MaxValue') AS vo2max
+                           json_extract(raw, '$.vO2MaxValue') AS vo2max,
+                           -- An interval workout: Garmin split it into work intervals,
+                           -- it followed a structured workout, or Garmin flagged
+                           -- intensity intervals. Anything else is a steady run.
+                           CASE WHEN json_extract(raw, '$.workoutId') IS NOT NULL
+                                  OR json_extract(raw, '$.hasIntensityIntervals') = 1
+                                  OR EXISTS (
+                                       SELECT 1 FROM json_each(raw, '$.splitSummaries') s
+                                        WHERE json_extract(s.value, '$.splitType') = 'INTERVAL_ACTIVE')
+                                THEN 1 ELSE 0 END AS is_interval
                     FROM activities
                     WHERE uid = ? AND substr(start_local, 1, 10) BETWEEN ? AND ?
                     ORDER BY start_local""",

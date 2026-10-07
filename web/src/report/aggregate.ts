@@ -12,6 +12,17 @@ export interface Activity {
   elevation_gain_m: number | null;
   /** Garmin's VO2max estimate recorded with the workout, if any. */
   vo2max: number | null;
+  /** 1 — an interval workout (work intervals, a structured workout or Garmin's flag). */
+  is_interval?: number | null;
+}
+
+/** Running split by how it was run: steady (cross) or intervals. */
+export type RunCategory = "all" | "cross" | "intervals";
+
+export function byRunCategory(activities: Activity[], category: RunCategory): Activity[] {
+  if (category === "intervals") return activities.filter((a) => a.is_interval === 1);
+  if (category === "cross") return activities.filter((a) => a.is_interval !== 1);
+  return activities;
 }
 
 export type Grouping = "workout" | "week" | "month";

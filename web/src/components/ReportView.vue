@@ -10,7 +10,16 @@ import Select from "primevue/select";
 import SelectButton from "primevue/selectbutton";
 import { api, ApiError, type Me } from "../api";
 import { buildFilters } from "../report/activityTypes";
-import { buildReport, correlations, selectActivities, totals, type Activity, type Grouping } from "../report/aggregate";
+import {
+  buildReport,
+  byRunCategory,
+  correlations,
+  selectActivities,
+  totals,
+  type Activity,
+  type Grouping,
+  type RunCategory,
+} from "../report/aggregate";
 import { buildChart, type DistanceView } from "../report/chart";
 import {
   describeCorrelation,
@@ -32,6 +41,12 @@ const emit = defineEmits<{ refreshMe: [] }>();
 const preset = ref<string | null>("6m");
 const range = ref<(Date | null)[]>(presetRange("6m", new Date()).map(fromDay));
 const grouping = ref<Grouping>("month");
+const runCategory = ref<RunCategory>("all");
+const runCategoryOptions = [
+  { label: "Усі", value: "all" },
+  { label: "Крос", value: "cross" },
+  { label: "Інтервали", value: "intervals" },
+];
 const distanceView = ref<DistanceView>("total");
 const distanceViewOptions = [
   { label: "Загальна відстань", value: "total" },
@@ -105,9 +120,12 @@ watch(filters, (list) => {
 const filter = computed(() => filters.value.find((f) => f.id === filterId.value) ?? null);
 const mode = computed(() => filter.value?.speedMode ?? "pacePerKm");
 
-const selected = computed(() =>
-  filter.value && shown.value ? selectActivities(activities.value, filter.value.typeKeys, shown.value.from, shown.value.to) : [],
-);
+const selected = computed(() => {
+  if (!filter.value || !shown.value) return [];
+  const picked = selectActivities(activities.value, filter.value.typeKeys, shown.value.from, shown.value.to);
+  // Cross vs intervals is a running split only.
+  return filter.value.id === "running" ? byRunCategory(picked, runCategory.value) : picked;
+});
 const rows = computed(() => (shown.value ? buildReport(selected.value, grouping.value, shown.value.from, shown.value.to) : []));
 const summary = computed(() => totals(selected.value));
 // Garmin estimates VO2max only for some sports (outdoor runs and walks); hide it elsewhere.
@@ -236,6 +254,17 @@ function corrClass(r: number | null) {
           placeholder="Немає тренувань"
           :disabled="filters.length === 0"
           class="activity"
+        />
+      </div>
+
+      <div v-if="filter?.id === 'running'" class="field">
+        <span class="label">Категорія</span>
+        <SelectButton
+          v-model="runCategory"
+          :options="runCategoryOptions"
+          option-label="label"
+          option-value="value"
+          :allow-empty="false"
         />
       </div>
 

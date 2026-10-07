@@ -255,3 +255,16 @@ def test_token_verifier_checks_signature_audience_and_issuer(monkeypatch):
     for bad in (token(aud="other-project"), token(iss="https://securetoken.google.com/other"), token(sub="")):
         with pytest.raises(Exception):
             verify(bad)
+
+
+def test_interval_runs_are_told_apart_from_steady_ones(env):
+    db, _ = env
+    steady = garmin_activity(1, "2026-03-10 07:00:00")
+    by_splits = {**garmin_activity(2, "2026-03-11 07:00:00"),
+                 "splitSummaries": [{"splitType": "RWD_RUN"}, {"splitType": "INTERVAL_ACTIVE"}]}
+    by_workout = {**garmin_activity(3, "2026-03-12 07:00:00"), "workoutId": 123}
+    by_flag = {**garmin_activity(4, "2026-03-13 07:00:00"), "hasIntensityIntervals": True}
+    walk_splits = {**garmin_activity(5, "2026-03-14 07:00:00"), "splitSummaries": [{"splitType": "RWD_WALK"}]}
+    db.upsert_activities("u1", [activity_row(a) for a in (steady, by_splits, by_workout, by_flag, walk_splits)])
+    rows = db.list_activities("u1", "2026-03-01", "2026-03-31")
+    assert {r["activity_id"]: r["is_interval"] for r in rows} == {1: 0, 2: 1, 3: 1, 4: 1, 5: 0}

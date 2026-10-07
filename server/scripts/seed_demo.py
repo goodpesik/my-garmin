@@ -27,6 +27,10 @@ def main(uid: str) -> None:
             run = _activity(activity_id, day, "Біг", type_key, km, pace * km, hr)
             # Slow upward drift with noise, like Garmin's estimate.
             run["vO2MaxValue"] = round(48 + (day - date.today()).days / -730 * -4 + rng.uniform(-1, 1))
+            # Every fourth run or so is an interval workout from the watch.
+            if rng.random() < 0.25:
+                run["workoutId"] = 1000 + activity_id % 97
+                run["splitSummaries"] = [{"splitType": "INTERVAL_WARMUP"}, {"splitType": "INTERVAL_ACTIVE"}]
             rows.append(run)
             activity_id += 1
         if rng.random() < 0.12:
