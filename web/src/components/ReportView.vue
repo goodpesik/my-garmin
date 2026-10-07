@@ -12,7 +12,17 @@ import { api, ApiError, type Me } from "../api";
 import { buildFilters } from "../report/activityTypes";
 import { buildReport, correlations, selectActivities, totals, type Activity, type Grouping } from "../report/aggregate";
 import { buildChart, type DistanceView } from "../report/chart";
-import { describeCorrelation, formatDuration, formatHr, formatKm, formatSpeed, rowLabel, speedTitle, speedValue } from "../report/format";
+import {
+  describeCorrelation,
+  formatDuration,
+  formatHr,
+  formatKm,
+  formatSpeed,
+  formatVo2,
+  rowLabel,
+  speedTitle,
+  speedValue,
+} from "../report/format";
 import { PRESETS, presetRange, toDay, fromDay } from "../report/period";
 import { isDark } from "../theme";
 
@@ -100,6 +110,8 @@ const selected = computed(() =>
 );
 const rows = computed(() => (shown.value ? buildReport(selected.value, grouping.value, shown.value.from, shown.value.to) : []));
 const summary = computed(() => totals(selected.value));
+// Garmin estimates VO2max only for some sports (outdoor runs and walks); hide it elsewhere.
+const hasVo2 = computed(() => summary.value.avgVo2max != null);
 const speedShort = computed(() => (mode.value === "kmh" ? "Швидкість" : "Темп"));
 const corr = computed(() => correlations(rows.value, (pace) => speedValue(pace, mode.value)));
 
@@ -114,6 +126,7 @@ const chart = computed(() => {
     km: cssVar("--p-primary-300", "#86efac"),
     speed: cssVar("--p-blue-500", "#3b82f6"),
     hr: cssVar("--p-red-500", "#ef4444"),
+    vo2: cssVar("--p-amber-400", "#fbbf24"),
     text: cssVar("--p-text-muted-color", "#64748b"),
     grid: cssVar("--p-content-border-color", "#e2e8f0"),
   }, distanceView.value);
@@ -261,6 +274,10 @@ function corrClass(r: number | null) {
         <span class="label">Середній пульс</span>
         <b>{{ formatHr(summary.avgHr) }}</b>
       </div>
+      <div v-if="hasVo2" class="stat card">
+        <span class="label">Середній VO2max</span>
+        <b>{{ formatVo2(summary.avgVo2max) }}</b>
+      </div>
       <div class="stat card">
         <span class="label">Час</span>
         <b>{{ formatDuration(summary.totalDurationS) }}</b>
@@ -329,6 +346,9 @@ function corrClass(r: number | null) {
         </Column>
         <Column header="Середній пульс">
           <template #body="{ data }">{{ formatHr(data.avgHr) }}</template>
+        </Column>
+        <Column v-if="hasVo2" header="VO2max">
+          <template #body="{ data }">{{ formatVo2(data.avgVo2max) }}</template>
         </Column>
         <Column header="Час">
           <template #body="{ data }">{{ data.count ? formatDuration(data.totalDurationS) : "—" }}</template>

@@ -19,10 +19,13 @@ export function distanceSeries(rows: ReportRow[], grouping: Grouping, view: Dist
   return { label: "Усього, км", data: rows.map((r) => (r.count > 0 ? Number(r.totalKm.toFixed(2)) : 0)) };
 }
 
+const VO2_LABEL = "Середній VO2max";
+
 export interface ChartColors {
   km: string;
   speed: string;
   hr: string;
+  vo2: string;
   text: string;
   grid: string;
 }
@@ -37,6 +40,7 @@ export function buildChart(
 ) {
   const isPace = mode !== "kmh";
   const distance = distanceSeries(rows, grouping, view);
+  const hasVo2 = rows.some((r) => r.avgVo2max != null);
   const data = {
     labels: rows.map((r) => rowLabel(r, grouping)),
     datasets: [
@@ -71,6 +75,19 @@ export function buildChart(
         yAxisID: "hr",
         order: 2,
       },
+      // Always present, even without values: Chart.js breaks when the dataset count changes in place.
+      {
+        type: "line" as const,
+        label: VO2_LABEL,
+        data: rows.map((r) => (r.avgVo2max == null ? null : Number(r.avgVo2max.toFixed(1)))),
+        borderColor: colors.vo2,
+        backgroundColor: colors.vo2,
+        borderDash: [6, 4],
+        tension: 0.3,
+        spanGaps: true,
+        yAxisID: "vo2",
+        order: 0,
+      },
     ],
   };
 
@@ -78,7 +95,12 @@ export function buildChart(
     maintainAspectRatio: false,
     interaction: { mode: "index" as const, intersect: false },
     plugins: {
-      legend: { labels: { color: colors.text } },
+      legend: {
+        labels: {
+          color: colors.text,
+          filter: (item: { text: string }) => hasVo2 || item.text !== VO2_LABEL,
+        },
+      },
       tooltip: {
         callbacks: {
           label: (ctx: { dataset: { yAxisID?: string; label?: string }; parsed: { y: number | null } }) => {
@@ -111,6 +133,12 @@ export function buildChart(
         title: { display: true, text: isPace ? "темп" : "км/год", color: colors.speed },
         ticks: { color: colors.speed, callback: (v: string | number) => formatSpeedTick(Number(v), mode) },
         grid: { drawOnChartArea: false },
+      },
+      // A fourth visible axis would crowd the chart; VO2max values show in the tooltip.
+      vo2: {
+        display: false,
+        beginAtZero: false,
+        grace: "20%",
       },
       hr: {
         position: "right" as const,

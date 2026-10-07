@@ -22,6 +22,7 @@ def garmin_activity(activity_id, start, type_key="running", distance=5000.0, dur
         "averageHR": hr,
         "maxHR": hr + 20,
         "elevationGain": 10.0,
+        "vO2MaxValue": 52.0,
     }
 
 
@@ -117,8 +118,9 @@ def test_list_activities_filters_by_local_date_inclusive(env):
             activity_row(garmin_activity(4, "2026-04-01 00:10:00")),
         ],
     )
-    ids = [r["activity_id"] for r in db.list_activities("u1", "2026-03-01", "2026-03-31")]
-    assert ids == [2, 3]
+    rows = db.list_activities("u1", "2026-03-01", "2026-03-31")
+    assert [r["activity_id"] for r in rows] == [2, 3]
+    assert rows[0]["vo2max"] == 52.0
 
 
 def test_api_requires_token_and_scopes_activities_by_user(env):

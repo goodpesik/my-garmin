@@ -143,7 +143,10 @@ class Database:
         """Activities whose local start date falls in [date_from, date_to] (YYYY-MM-DD, inclusive)."""
         with self._lock:
             rows = self._conn.execute(
-                f"""SELECT {", ".join(ACTIVITY_COLUMNS)} FROM activities
+                f"""SELECT {", ".join(ACTIVITY_COLUMNS)},
+                           -- Garmin's VO2max estimate recorded with the activity, when it made one.
+                           json_extract(raw, '$.vO2MaxValue') AS vo2max
+                    FROM activities
                     WHERE uid = ? AND substr(start_local, 1, 10) BETWEEN ? AND ?
                     ORDER BY start_local""",
                 (uid, date_from, date_to),

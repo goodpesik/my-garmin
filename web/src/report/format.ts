@@ -41,6 +41,10 @@ export function formatHr(hr: number | null): string {
   return hr == null ? "—" : String(Math.round(hr));
 }
 
+export function formatVo2(value: number | null): string {
+  return value == null ? "—" : value.toFixed(1);
+}
+
 export function formatDuration(totalSeconds: number): string {
   const minutes = Math.round(totalSeconds / 60);
   const h = Math.floor(minutes / 60);

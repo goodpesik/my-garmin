@@ -24,7 +24,10 @@ def main(uid: str) -> None:
             pace = rng.uniform(290, 360) + (km - 10) * 2
             hr = 135 + (360 - pace) * 0.25 + km * 0.6 + rng.uniform(-6, 6)
             type_key = "trail_running" if rng.random() < 0.15 else "running"
-            rows.append(_activity(activity_id, day, "Біг", type_key, km, pace * km, hr))
+            run = _activity(activity_id, day, "Біг", type_key, km, pace * km, hr)
+            # Slow upward drift with noise, like Garmin's estimate.
+            run["vO2MaxValue"] = round(48 + (day - date.today()).days / -730 * -4 + rng.uniform(-1, 1))
+            rows.append(run)
             activity_id += 1
         if rng.random() < 0.12:
             km = rng.uniform(25, 80)

@@ -10,6 +10,8 @@ export interface Activity {
   avg_hr: number | null;
   max_hr: number | null;
   elevation_gain_m: number | null;
+  /** Garmin's VO2max estimate recorded with the workout, if any. */
+  vo2max: number | null;
 }
 
 export type Grouping = "workout" | "week" | "month";
@@ -29,6 +31,8 @@ export interface ReportRow {
   paceSecPerKm: number | null;
   /** Mean of the workouts' average heart rate. */
   avgHr: number | null;
+  /** Mean VO2max over the workouts that carry one. */
+  avgVo2max: number | null;
   totalDurationS: number;
 }
 
@@ -74,6 +78,8 @@ function summarize(activities: Activity[]): Omit<ReportRow, "key" | "start" | "e
   let totalDurationS = 0;
   let hrSum = 0;
   let hrCount = 0;
+  let vo2Sum = 0;
+  let vo2Count = 0;
   for (const a of activities) {
     const distance = a.distance_m ?? 0;
     const duration = a.duration_s ?? 0;
@@ -87,6 +93,10 @@ function summarize(activities: Activity[]): Omit<ReportRow, "key" | "start" | "e
       hrSum += a.avg_hr;
       hrCount += 1;
     }
+    if (a.vo2max != null && a.vo2max > 0) {
+      vo2Sum += a.vo2max;
+      vo2Count += 1;
+    }
   }
   const count = activities.length;
   return {
@@ -95,6 +105,7 @@ function summarize(activities: Activity[]): Omit<ReportRow, "key" | "start" | "e
     avgKm: count > 0 ? totalM / 1000 / count : null,
     paceSecPerKm: pacedM > 0 ? pacedS / (pacedM / 1000) : null,
     avgHr: hrCount > 0 ? hrSum / hrCount : null,
+    avgVo2max: vo2Count > 0 ? vo2Sum / vo2Count : null,
     totalDurationS,
   };
 }

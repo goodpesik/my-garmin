@@ -17,6 +17,7 @@ function run(id: number, start: string, km: number | null, minutes: number | nul
     avg_hr: hr,
     max_hr: null,
     elevation_gain_m: null,
+    vo2max: null,
   };
 }
 
@@ -168,5 +169,18 @@ describe("distanceSeries", () => {
   it("shows total per bucket, or mean per workout with gaps for empty buckets", () => {
     expect(distanceSeries(rows, "month", "total").data).toEqual([16, 0]);
     expect(distanceSeries(rows, "month", "avg").data).toEqual([8, null]);
+  });
+});
+
+describe("VO2max", () => {
+  it("averages only the workouts that carry an estimate", () => {
+    const acts = [
+      { ...run(1, "2026-01-05 07:00:00", 10, 50, 150), vo2max: 50 },
+      { ...run(2, "2026-01-12 07:00:00", 10, 50, 150), vo2max: 54 },
+      run(3, "2026-01-19 07:00:00", 10, 50, 150),
+    ];
+    const [jan, feb] = buildReport(acts, "month", "2026-01-01", "2026-02-28");
+    expect(jan.avgVo2max).toBe(52);
+    expect(feb.avgVo2max).toBeNull();
   });
 });
