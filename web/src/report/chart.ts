@@ -2,6 +2,23 @@ import type { SpeedMode } from "./activityTypes";
 import type { Grouping, ReportRow } from "./aggregate";
 import { formatSpeedTick, rowLabel, speedTitle, speedValue } from "./format";
 
+/** What the bars show: the bucket's total distance or the mean distance of one workout in it. */
+export type DistanceView = "total" | "avg";
+
+/** Bar values and their legend label for the chosen distance view. */
+export function distanceSeries(rows: ReportRow[], grouping: Grouping, view: DistanceView) {
+  if (grouping === "workout") {
+    return { label: "Дистанція, км", data: rows.map((r) => Number(r.totalKm.toFixed(2))) };
+  }
+  if (view === "avg") {
+    return {
+      label: "Середня дистанція тренування, км",
+      data: rows.map((r) => (r.avgKm == null ? null : Number(r.avgKm.toFixed(2)))),
+    };
+  }
+  return { label: "Усього, км", data: rows.map((r) => (r.count > 0 ? Number(r.totalKm.toFixed(2)) : 0)) };
+}
+
 export interface ChartColors {
   km: string;
   speed: string;
@@ -11,15 +28,22 @@ export interface ChartColors {
 }
 
 /** Chart.js data and options: distance as bars, pace/speed and heart rate as lines on their own axes. */
-export function buildChart(rows: ReportRow[], grouping: Grouping, mode: SpeedMode, colors: ChartColors) {
+export function buildChart(
+  rows: ReportRow[],
+  grouping: Grouping,
+  mode: SpeedMode,
+  colors: ChartColors,
+  view: DistanceView = "total",
+) {
   const isPace = mode !== "kmh";
+  const distance = distanceSeries(rows, grouping, view);
   const data = {
     labels: rows.map((r) => rowLabel(r, grouping)),
     datasets: [
       {
         type: "bar" as const,
-        label: grouping === "workout" ? "Дистанція, км" : "Усього, км",
-        data: rows.map((r) => (r.count > 0 ? Number(r.totalKm.toFixed(2)) : 0)),
+        label: distance.label,
+        data: distance.data,
         backgroundColor: colors.km,
         borderRadius: 4,
         yAxisID: "km",

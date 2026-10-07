@@ -3,6 +3,7 @@ import { buildFilters } from "./activityTypes";
 import { buildReport, correlations, pearson, selectActivities, weekStart, type Activity } from "./aggregate";
 import { formatSpeed, rowLabel } from "./format";
 import { presetRange } from "./period";
+import { distanceSeries } from "./chart";
 
 function run(id: number, start: string, km: number | null, minutes: number | null, hr: number | null, type = "running"): Activity {
   return {
@@ -157,5 +158,15 @@ describe("period edges", () => {
     ]);
     const months = buildReport([], "month", "2026-09-15", "2026-10-31");
     expect(months.map((r) => rowLabel(r, "month"))).toEqual(["Вересень 2026 (15.09–30.09)", "Жовтень 2026"]);
+  });
+});
+
+describe("distanceSeries", () => {
+  const acts = [run(1, "2026-01-05 07:00:00", 10, 50, 150), run(2, "2026-01-20 07:00:00", 6, 30, 150)];
+  const rows = buildReport(acts, "month", "2026-01-01", "2026-02-28");
+
+  it("shows total per bucket, or mean per workout with gaps for empty buckets", () => {
+    expect(distanceSeries(rows, "month", "total").data).toEqual([16, 0]);
+    expect(distanceSeries(rows, "month", "avg").data).toEqual([8, null]);
   });
 });

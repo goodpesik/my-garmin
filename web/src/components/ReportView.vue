@@ -11,7 +11,7 @@ import SelectButton from "primevue/selectbutton";
 import { api, ApiError, type Me } from "../api";
 import { buildFilters } from "../report/activityTypes";
 import { buildReport, correlations, selectActivities, totals, type Activity, type Grouping } from "../report/aggregate";
-import { buildChart } from "../report/chart";
+import { buildChart, type DistanceView } from "../report/chart";
 import { describeCorrelation, formatDuration, formatHr, formatKm, formatSpeed, rowLabel, speedTitle, speedValue } from "../report/format";
 import { PRESETS, presetRange, toDay, fromDay } from "../report/period";
 import { isDark } from "../theme";
@@ -22,6 +22,11 @@ const emit = defineEmits<{ refreshMe: [] }>();
 const preset = ref<string | null>("6m");
 const range = ref<(Date | null)[]>(presetRange("6m", new Date()).map(fromDay));
 const grouping = ref<Grouping>("month");
+const distanceView = ref<DistanceView>("total");
+const distanceViewOptions = [
+  { label: "Загальна відстань", value: "total" },
+  { label: "Середня за тренування", value: "avg" },
+];
 const filterId = ref<string | null>(null);
 
 const activities = ref<Activity[]>([]);
@@ -111,7 +116,7 @@ const chart = computed(() => {
     hr: cssVar("--p-red-500", "#ef4444"),
     text: cssVar("--p-text-muted-color", "#64748b"),
     grid: cssVar("--p-content-border-color", "#e2e8f0"),
-  });
+  }, distanceView.value);
 });
 
 // ---- sync ---------------------------------------------------------------
@@ -263,7 +268,19 @@ function corrClass(r: number | null) {
     </section>
 
     <section class="card chart-card">
-      <Chart type="bar" :data="chart.data" :options="chart.options" class="chart" />
+      <SelectButton
+        v-if="grouping !== 'workout'"
+        v-model="distanceView"
+        :options="distanceViewOptions"
+        option-label="label"
+        option-value="value"
+        :allow-empty="false"
+        size="small"
+        class="chart-view"
+      />
+      <div class="chart-box">
+        <Chart type="bar" :data="chart.data" :options="chart.options" class="chart" />
+      </div>
     </section>
 
     <section class="card corr">
@@ -394,6 +411,14 @@ function corrClass(r: number | null) {
   font-size: 1.35rem;
 }
 .chart-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.chart-view {
+  align-self: flex-start;
+}
+.chart-box {
   height: 380px;
 }
 .chart {
