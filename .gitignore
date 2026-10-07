@@ -17,3 +17,6 @@ server/data/
 .DS_Store
 firebase-debug.log
 .firebase/
+
+# Production web env lives in GitHub secrets (see .github/workflows/ci.yml)
+web/.env.production
