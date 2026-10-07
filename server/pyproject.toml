@@ -1,0 +1,18 @@
+[project]
+name = "my-garmin-server"
+version = "0.1.0"
+description = "My Garmin API: Garmin Connect sync and report data"
+requires-python = ">=3.13"
+dependencies = [
+    "cryptography>=50.0.2",
+    "fastapi>=0.142.2",
+    "firebase-admin>=7.7.0",
+    "garminconnect>=0.3.17",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+]

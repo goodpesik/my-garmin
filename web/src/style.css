@@ -1,0 +1,24 @@
+:root {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  background: var(--p-surface-50);
+  color: var(--p-text-color);
+}
+
+.app-dark {
+  color-scheme: dark;
+}
+
+.app-dark body {
+  background: var(--p-surface-950);
+}
+
+#app {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px;
+}

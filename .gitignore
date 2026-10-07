@@ -1,0 +1,19 @@
+# Dependencies and builds
+node_modules/
+dist/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Local data and secrets
+server/data/
+.env
+.env.local
+.env.*.local
+*.sqlite
+
+# Tooling
+.DS_Store
+firebase-debug.log
+.firebase/
