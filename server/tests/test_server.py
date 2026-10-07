@@ -268,3 +268,50 @@ def test_interval_runs_are_told_apart_from_steady_ones(env):
     db.upsert_activities("u1", [activity_row(a) for a in (steady, by_splits, by_workout, by_flag, walk_splits)])
     rows = db.list_activities("u1", "2026-03-01", "2026-03-31")
     assert {r["activity_id"]: r["is_interval"] for r in rows} == {1: 0, 2: 1, 3: 1, 4: 1, 5: 0}
+
+
+class RateLimitedGarmin:
+    created = 0
+    skipped = None
+
+    def __init__(self, **kwargs):
+        RateLimitedGarmin.created += 1
+        self.client = type("Inner", (), {"skip_strategies": set()})()
+
+    def login(self):
+        RateLimitedGarmin.skipped = set(self.client.skip_strategies)
+        raise garmin_module.GarminConnectTooManyRequestsError("All login strategies rate limited (429)")
+
+
+def test_rate_limit_pauses_logins_without_asking_garmin_again(env, monkeypatch):
+    _, service = env
+    RateLimitedGarmin.created = 0
+    monkeypatch.setattr(garmin_module, "Garmin", RateLimitedGarmin)
+    with pytest.raises(garmin_module.GarminLoginError):
+        service.start_login("u1", "a@example.com", "pw")
+    assert RateLimitedGarmin.created == 1
+    assert RateLimitedGarmin.skipped == garmin_module.SKIPPED_LOGIN_STRATEGIES
+    # Another user during the pause: refused before any request to Garmin.
+    with pytest.raises(garmin_module.GarminLoginError, match="після"):
+        service.start_login("u2", "b@example.com", "pw")
+    assert RateLimitedGarmin.created == 1
+    # The pause ends on its own.
+    monkeypatch.setattr(garmin_module.time, "time", lambda: service._login_blocked_until + 1)
+    with pytest.raises(garmin_module.GarminLoginError):
+        service.start_login("u2", "b@example.com", "pw")
+    assert RateLimitedGarmin.created == 2
+
+
+def test_cloudflare_challenge_pauses_logins_too(env, monkeypatch):
+    _, service = env
+
+    class Challenged(RateLimitedGarmin):
+        def login(self):
+            raise garmin_module.GarminConnectConnectionError(
+                "All login strategies exhausted: Portal login: HTTP 403 (Cloudflare bot challenge)"
+            )
+
+    monkeypatch.setattr(garmin_module, "Garmin", Challenged)
+    with pytest.raises(garmin_module.GarminLoginError):
+        service.start_login("u1", "a@example.com", "pw")
+    assert service._login_blocked_until > garmin_module.time.time()

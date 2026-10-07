@@ -10,6 +10,7 @@ import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from cryptography.fernet import Fernet, InvalidToken
 from garminconnect import (
@@ -24,6 +25,15 @@ from .db import Database
 logger = logging.getLogger("my_garmin.garmin")
 
 MFA_TTL_SECONDS = 300
+# Garmin answers 429 to the whole IP once it sees a series of logins, and every
+# further attempt extends the block. After a 429 the server stops asking Garmin
+# for this long; all users share the server IP, so the pause is shared too.
+LOGIN_COOLDOWN_SECONDS = 3600
+# Each skipped strategy is one request less to Garmin SSO per attempt. The
+# "+requests" twins repeat the same endpoint with a less browser-like client,
+# and the widget flow fails on its page title with the current Garmin SSO.
+SKIPPED_LOGIN_STRATEGIES = {"mobile+requests", "widget+cffi", "portal+requests"}
+KYIV = ZoneInfo("Europe/Kyiv")
 # The first sync pulls the whole history; Garmin Connect has no data before this.
 HISTORY_START = date(2000, 1, 1)
 # Re-read a few days before the newest stored activity: edits made in Garmin
@@ -37,6 +47,16 @@ class GarminLoginError(Exception):
 
 class GarminNotConnected(Exception):
     pass
+
+
+def _kyiv_hhmm(ts: float) -> str:
+    return datetime.fromtimestamp(ts, KYIV).strftime("%H:%M")
+
+
+def _blocked_error(until: float) -> GarminLoginError:
+    return GarminLoginError(
+        f"Garmin тимчасово обмежив вхід із нашого сервера. Спробуй після {_kyiv_hhmm(until)}."
+    )
 
 
 def mask_email(email: str) -> str:
@@ -81,22 +101,28 @@ class GarminService:
         self._pending_lock = threading.Lock()
         self._sync_lock = threading.Lock()
         self._syncing: set[str] = set()
+        self._login_blocked_until = 0.0  # time.time(); 0 — not blocked
 
     # ---- login -------------------------------------------------------------
 
     def start_login(self, uid: str, email: str, password: str) -> str:
         """Returns "connected" or "mfa_required"."""
+        self._refuse_while_blocked(uid, email)
         client = Garmin(email=email, password=password, return_on_mfa=True)
+        client.client.skip_strategies = set(SKIPPED_LOGIN_STRATEGIES)
         try:
             status, _ = client.login()
         except GarminConnectAuthenticationError as e:
             logger.warning("Garmin login rejected uid=%s email=%s: %s", uid, mask_email(email), e)
             raise GarminLoginError("Garmin не прийняв пошту або пароль.") from e
         except GarminConnectTooManyRequestsError as e:
-            logger.warning("Garmin login rate limited uid=%s email=%s", uid, mask_email(email))
-            raise GarminLoginError("Garmin тимчасово обмежив вхід. Спробуй за кілька хвилин.") from e
+            logger.warning("Garmin login rate limited uid=%s email=%s: %s", uid, mask_email(email), e)
+            raise self._block_logins() from e
         except GarminConnectConnectionError as e:
             logger.warning("Garmin login connection error uid=%s email=%s: %s", uid, mask_email(email), e)
+            # A Cloudflare challenge is the same block, only answered with 403.
+            if "Cloudflare" in str(e) or "429" in str(e):
+                raise self._block_logins() from e
             raise GarminLoginError("Не вдалося зʼєднатися з Garmin. Спробуй ще раз.") from e
         except Exception as e:
             logger.exception("Garmin login failed unexpectedly uid=%s email=%s", uid, mask_email(email))
@@ -133,7 +159,7 @@ class GarminService:
             if pending.client.client._mfa_pending:
                 logger.warning("Garmin MFA not accepted uid=%s email=%s: %s", uid, mask_email(pending.email), e)
                 if isinstance(e, GarminConnectTooManyRequestsError):
-                    raise GarminLoginError("Garmin тимчасово обмежив вхід. Спробуй за кілька хвилин.") from e
+                    raise self._block_logins() from e
                 raise GarminLoginError("Код не підійшов. Перевір і введи ще раз.") from e
             with self._pending_lock:
                 self._pending.pop(uid, None)
@@ -142,6 +168,21 @@ class GarminService:
         with self._pending_lock:
             self._pending.pop(uid, None)
         self._store_session(uid, pending.client, pending.email)
+
+    def _refuse_while_blocked(self, uid: str, email: str) -> None:
+        until = self._login_blocked_until
+        if time.time() < until:
+            logger.info(
+                "Garmin login skipped during cooldown uid=%s email=%s until=%s",
+                uid, mask_email(email), _kyiv_hhmm(until),
+            )
+            raise _blocked_error(until)
+
+    def _block_logins(self) -> GarminLoginError:
+        until = time.time() + LOGIN_COOLDOWN_SECONDS
+        self._login_blocked_until = until
+        logger.warning("Garmin logins paused until %s (Kyiv) after a rate limit", _kyiv_hhmm(until))
+        return _blocked_error(until)
 
     def disconnect(self, uid: str) -> None:
         self._db.clear_garmin_session(uid)
