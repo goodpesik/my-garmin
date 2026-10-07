@@ -205,3 +205,51 @@ def test_emulator_is_refused_for_a_real_project(monkeypatch):
         load_settings()
     monkeypatch.setenv("FIREBASE_PROJECT_ID", "demo-my-garmin")
     assert load_settings().firebase_project_id == "demo-my-garmin"
+
+
+def test_token_verifier_checks_signature_audience_and_issuer(monkeypatch):
+    import datetime as dt
+    import json
+    import time
+
+    import google.auth.crypt
+    import google.auth.jwt
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.x509.oid import NameOID
+
+    from app.main import make_token_verifier
+
+    monkeypatch.delenv("FIREBASE_AUTH_EMULATOR_HOST", raising=False)
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "test")])
+    now = dt.datetime.now(dt.timezone.utc)
+    cert = (
+        x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key())
+        .serial_number(1).not_valid_before(now - dt.timedelta(days=1)).not_valid_after(now + dt.timedelta(days=1))
+        .sign(key, hashes.SHA256())
+    )
+    pem_cert = cert.public_bytes(serialization.Encoding.PEM).decode()
+    pem_key = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+                                serialization.NoEncryption()).decode()
+    signer = google.auth.crypt.RSASigner.from_string(pem_key, key_id="k1")
+
+    class CertsResponse:
+        status = 200
+        data = json.dumps({"k1": pem_cert}).encode()
+
+    def fake_request(url, method="GET", **kwargs):
+        return CertsResponse()
+
+    def token(**overrides):
+        t = int(time.time())
+        claims = {"aud": "my-garmin-fh", "iss": "https://securetoken.google.com/my-garmin-fh",
+                  "sub": "user-1", "iat": t, "exp": t + 3600, **overrides}
+        return google.auth.jwt.encode(signer, claims).decode()
+
+    verify = make_token_verifier("my-garmin-fh", request=fake_request)
+    assert verify(token()) == "user-1"
+    for bad in (token(aud="other-project"), token(iss="https://securetoken.google.com/other"), token(sub="")):
+        with pytest.raises(Exception):
+            verify(bad)

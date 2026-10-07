@@ -25,9 +25,11 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
+      // Garmin login may legitimately take a minute (its anti-bot waits); everything else is quick.
+      signal: AbortSignal.timeout(path.startsWith("/api/garmin/") ? 120_000 : 30_000),
     });
   } catch {
-    throw new ApiError("Сервер недоступний.", 0);
+    throw new ApiError("Сервер не відповідає. Спробуй пізніше.", 0);
   }
   const data = await response.json().catch(() => null);
   if (!response.ok) {

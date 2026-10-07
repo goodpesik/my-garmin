@@ -1,11 +1,16 @@
 import logging
+import os
 import re
+from collections.abc import Callable
 from datetime import date
+from typing import Any
 
 import firebase_admin
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from firebase_admin import auth as firebase_auth
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token as google_id_token
 from pydantic import BaseModel, Field
 
 from .config import load_settings
@@ -16,16 +21,38 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 logger = logging.getLogger("my_garmin.api")
 
 
-def verify_firebase_token(token: str) -> str:
-    return firebase_auth.verify_id_token(token)["uid"]
+def make_token_verifier(project_id: str, request: Callable[..., Any] | None = None) -> Callable[[str], str]:
+    """Returns a function that maps a Firebase ID token to its uid or raises.
+
+    Production tokens are checked against Google's public certs with google-auth:
+    firebase_admin.verify_id_token would demand service-account credentials it
+    does not need, and without them it stalls on the GCE metadata probe and fails.
+    The Auth emulator issues unsigned tokens, which only firebase_admin accepts.
+    """
+    if os.environ.get("FIREBASE_AUTH_EMULATOR_HOST"):
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(options={"projectId": project_id})
+        return lambda token: firebase_auth.verify_id_token(token)["uid"]
+
+    http = request or google_requests.Request()
+    issuer = f"https://securetoken.google.com/{project_id}"
+
+    def verify(token: str) -> str:
+        claims = google_id_token.verify_firebase_token(token, http, audience=project_id, clock_skew_in_seconds=10)
+        if claims.get("iss") != issuer:
+            raise ValueError(f"unexpected issuer {claims.get('iss')!r}")
+        uid = claims.get("sub")
+        if not isinstance(uid, str) or not uid:
+            raise ValueError("token has no subject")
+        return uid
+
+    return verify
 
 
 def create_app(db: Database | None = None, garmin: GarminService | None = None, verify_token=None) -> FastAPI:
     settings = load_settings()
     if verify_token is None:
-        if not firebase_admin._apps:
-            firebase_admin.initialize_app(options={"projectId": settings.firebase_project_id})
-        verify_token = verify_firebase_token
+        verify_token = make_token_verifier(settings.firebase_project_id)
     db = db or Database(settings.db_path)
     garmin = garmin or GarminService(db, settings.token_key)
 
@@ -44,7 +71,8 @@ def create_app(db: Database | None = None, garmin: GarminService | None = None, 
         try:
             return verify_token(token)
         except Exception as e:
-            logger.warning("Rejected Firebase token: %s", type(e).__name__)
+            # The message names the reason (expired, wrong audience, certs unreachable); it holds no token.
+            logger.warning("Rejected Firebase token: %s: %s", type(e).__name__, str(e)[:300])
             raise HTTPException(401, "Сесія недійсна. Увійди ще раз.") from e
 
     class GarminLogin(BaseModel):
