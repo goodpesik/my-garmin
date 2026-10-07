@@ -1,1 +1,1 @@
-{ "projects": { "default": "demo-my-garmin" } }
+{ "projects": { "default": "my-garmin-fh", "local": "demo-my-garmin" } }

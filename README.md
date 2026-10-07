@@ -44,3 +44,10 @@ cd server && uv run python -m scripts.seed_demo <firebase-uid>
 cd server && uv run pytest -q
 cd web && npx vitest run
 ```
+
+## Production
+
+- Web: Firebase Hosting, project `my-garmin-fh` → https://garmin.fitshandler.com (also https://my-garmin-fh.web.app).
+  Deploy: `cd web && npm run build && cd .. && firebase deploy --only hosting`.
+- API: Raspberry Pi → https://garmin-api.fitshandler.com (systemd + uvicorn, SQLite on the Pi).
+  `server/.env` there sets `TOKEN_KEY`, `FIREBASE_PROJECT_ID=my-garmin-fh`, `CORS_ORIGINS`; never the emulator host.
